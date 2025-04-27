@@ -264,22 +264,15 @@ function SharkLib:_setupInteractions()
 		local dragStart
 		local startPos
 
-		local function updateDrag(input)
+				local function updateDrag(input)
 			if not dragging then return end
 			local delta = input.Position - dragStart
+            -- Calculate the intended target position without clamping
 			local targetPosition = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 
-            -- Clamp position to screen bounds (optional, but good practice)
-            local vpSize = workspace.CurrentCamera.ViewportSize
-            targetPosition = UDim2.new(
-                targetPosition.X.Scale,
-                math.clamp(targetPosition.X.Offset, 0, vpSize.X - self._mainFrame.AbsoluteSize.X),
-                targetPosition.Y.Scale,
-                math.clamp(targetPosition.Y.Offset, 0, vpSize.Y - self._mainFrame.AbsoluteSize.Y)
-            )
+            -- The clamping block has been removed/commented out.
 
-			-- Use RenderStepped for smoother dragging instead of Tween
-            -- TweenService:Create(self._mainFrame, TweenInfo.new(0.05), { Position = targetPosition }):Play()
+			-- Apply the calculated position directly
             self._mainFrame.Position = targetPosition
 		end
 
