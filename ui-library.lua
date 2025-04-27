@@ -1,1129 +1,1065 @@
--- SharkUI (ModuleScript)
--- Location: ReplicatedStorage or similar
-
-local Players = game:GetService("Players")
+-- ModuleScript in ReplicatedStorage named "SharkHackLib"
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
-local Player = Players.LocalPlayer or Players.PlayerAdded:Wait()
-local PlayerGui = Player:WaitForChild("PlayerGui")
+local Library = {}
 
-local SharkUI = {}
-SharkUI.__index = SharkUI
-
--- Default Animation settings (can be overridden)
-local DEFAULT_ANIMATION_SPEED = 0.3
-local DEFAULT_EASE_STYLE = Enum.EasingStyle.Quart
-local DEFAULT_EASE_DIRECTION = Enum.EasingDirection.Out
-
--- Default Colors (can be overridden)
-local DEFAULT_COLORS = {
-	Background = Color3.fromRGB(20, 20, 25),
-	TitleBar = Color3.fromRGB(15, 15, 20),
-	Sidebar = Color3.fromRGB(25, 25, 30),
-	Accent = Color3.fromRGB(78, 93, 234), -- Main theme color
-	AccentHover = Color3.fromRGB(98, 113, 254),
-	Text = Color3.fromRGB(255, 255, 255),
-	TextMuted = Color3.fromRGB(150, 150, 150),
-	ToggleOff = Color3.fromRGB(40, 40, 45),
-	SliderTrack = Color3.fromRGB(40, 40, 45),
-	PopupBackground = Color3.fromRGB(30, 30, 35),
-	CloseHover = Color3.fromRGB(255, 100, 100),
-	MinimizeHover = Color3.fromRGB(100, 200, 255),
-	Stroke = Color3.fromRGB(255, 255, 255),
+-- Default Settings (can be overridden)
+Library.Settings = {
+	AnimationSpeed = 0.3,
+	EaseStyle = Enum.EasingStyle.Quart,
+	EaseDirection = Enum.EasingDirection.Out,
+	ThemeColor = Color3.fromRGB(78, 93, 234),
+	AccentColor = Color3.fromRGB(255, 255, 255),
+	BackgroundColor = Color3.fromRGB(20, 20, 25),
+	SecondaryBackgroundColor = Color3.fromRGB(25, 25, 30),
+	InactiveColor = Color3.fromRGB(150, 150, 150),
+	TitleBarColor = Color3.fromRGB(15, 15, 20),
+    TextColor = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.Gotham,
+    FontBold = Enum.Font.GothamBold,
+    ToggleOffColor = Color3.fromRGB(40, 40, 45),
+    SliderTrackColor = Color3.fromRGB(40, 40, 45),
+    ScrollBarThickness = 4,
 }
 
--- Helper function for creating instances with properties
-local function createInstance(className, properties)
-	local inst = Instance.new(className)
-	for prop, value in pairs(properties or {}) do
-		inst[prop] = value
-	end
-	return inst
+-- Internal helper for tweening
+local function tween(instance, properties, overrideInfo)
+	local info = overrideInfo or TweenInfo.new(
+        Library.Settings.AnimationSpeed,
+        Library.Settings.EaseStyle,
+        Library.Settings.EaseDirection
+    )
+	return TweenService:Create(instance, info, properties)
 end
 
--- ==================================================
--- Internal Component Creation Functions
--- ==================================================
+--[[
+	Creates the main window structure.
+	@param title The text displayed in the title bar.
+	@param size The UDim2 size of the window.
+	@param position The UDim2 position of the window.
+	@returns A table containing { screenGui, mainFrame, titleBar, contentArea, sidebarContainer }
+]]
+function Library.CreateWindow(title, size, position)
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "SharkHackGUI_LibInstance" -- Give unique name
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local function createScrollingFrame(parent, name, position, size, colors)
-	local scrollingFrame = createInstance("ScrollingFrame", {
-		Name = name,
-		Size = size,
-		Position = position,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ScrollBarThickness = 4,
-		ScrollBarImageColor3 = colors.Accent,
-		ScrollingDirection = Enum.ScrollingDirection.Y,
-		VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right,
-		Parent = parent,
-		ClipsDescendants = true, -- Important for contained elements
-	})
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Name = "MainFrame"
+	mainFrame.Size = size
+	mainFrame.Position = position
+	mainFrame.BackgroundColor3 = Library.Settings.BackgroundColor
+	mainFrame.BorderSizePixel = 0
+	mainFrame.ClipsDescendants = true -- Important for minimize animation
+	mainFrame.Parent = screenGui
 
-	local listLayout = createInstance("UIListLayout", {
-		Name = "ListLayout",
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 6),
-		Parent = scrollingFrame,
-	})
+	-- Add window title bar
+	local titleBar = Instance.new("Frame")
+	titleBar.Name = "TitleBar"
+	titleBar.Size = UDim2.new(1, 0, 0, 30)
+	titleBar.BackgroundColor3 = Library.Settings.TitleBarColor
+	titleBar.BorderSizePixel = 0
+	titleBar.Parent = mainFrame
 
-	createInstance("UIPadding", {
-		Name = "Padding",
-		PaddingTop = UDim.new(0, 5),
-		PaddingLeft = UDim.new(0, 5),
-		PaddingRight = UDim.new(0, 5),
-		Parent = scrollingFrame,
-	})
+	-- Title text
+	local titleText = Instance.new("TextLabel")
+	titleText.Name = "TitleText"
+	titleText.Size = UDim2.new(1, -100, 1, 0)
+	titleText.Position = UDim2.new(0, 10, 0, 0)
+	titleText.BackgroundTransparency = 1
+	titleText.Text = title
+	titleText.TextColor3 = Library.Settings.TextColor
+	titleText.TextSize = 16
+	titleText.Font = Library.Settings.FontBold
+	titleText.TextXAlignment = Enum.TextXAlignment.Left
+	titleText.Parent = titleBar
 
-	-- Update canvas size automatically
-	listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10) -- Add extra padding
+	-- Close button
+	local closeButton = Instance.new("TextButton")
+	closeButton.Name = "CloseButton"
+	closeButton.Size = UDim2.new(0, 30, 0, 30)
+	closeButton.Position = UDim2.new(1, -30, 0, 0)
+	closeButton.BackgroundTransparency = 1
+	closeButton.Text = "✕"
+	closeButton.TextColor3 = Library.Settings.TextColor
+	closeButton.TextSize = 16
+	closeButton.Font = Library.Settings.FontBold
+	closeButton.Parent = titleBar
+
+	-- Minimize button
+	local minimizeButton = Instance.new("TextButton")
+	minimizeButton.Name = "MinimizeButton"
+	minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+	minimizeButton.Position = UDim2.new(1, -60, 0, 0)
+	minimizeButton.BackgroundTransparency = 1
+	minimizeButton.Text = "−"
+	minimizeButton.TextColor3 = Library.Settings.TextColor
+	minimizeButton.TextSize = 16
+	minimizeButton.Font = Library.Settings.FontBold
+	minimizeButton.Parent = titleBar
+
+	-- Container for the sidebar (allows easy positioning)
+	local sidebarContainer = Instance.new("Frame")
+	sidebarContainer.Name = "SidebarContainer"
+	sidebarContainer.Size = UDim2.new(0, 165, 1, -30)
+	sidebarContainer.Position = UDim2.new(0, 0, 0, 30)
+	sidebarContainer.BackgroundTransparency = 1 -- Container is transparent
+	sidebarContainer.BorderSizePixel = 0
+	sidebarContainer.Parent = mainFrame
+
+	-- Content area
+	local contentArea = Instance.new("Frame")
+	contentArea.Name = "ContentArea"
+	contentArea.Size = UDim2.new(1, -165, 1, -30)
+	contentArea.Position = UDim2.new(0, 165, 0, 30)
+	contentArea.BackgroundTransparency = 1
+	contentArea.Parent = mainFrame
+
+	-- Make window draggable
+	local dragging = false
+	local dragInput
+	local dragStart
+	local startPos
+
+	local function updateDrag(input)
+		local delta = input.Position - dragStart
+		local targetPosition = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		tween(mainFrame, { Position = targetPosition }, TweenInfo.new(0.05)):Play() -- Faster tween for dragging
+	end
+
+	titleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+			tween(titleBar, { BackgroundColor3 = Library.Settings.TitleBarColor:Lerp(Color3.new(0,0,0), 0.3) }, TweenInfo.new(0.1)):Play()
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+					tween(titleBar, { BackgroundColor3 = Library.Settings.TitleBarColor }, TweenInfo.new(0.1)):Play()
+				end
+			end)
+		end
 	end)
 
-	return scrollingFrame, listLayout
-end
-
--- ==================================================
--- Library Public Interface
--- ==================================================
-
-function SharkUI.new(options)
-	options = options or {}
-	local window = setmetatable({}, SharkUI)
-
-	window.Name = options.Name or "SharkHackWindow"
-	window.Title = options.Title or "SharkHack"
-	window.Size = options.Size or UDim2.new(0, 500, 0, 350)
-	window.Draggable = options.Draggable ~= false -- Default true
-	window.Minimizable = options.Minimizable ~= false -- Default true
-	window.Closable = options.Closable ~= false -- Default true
-	window.StartVisible = options.StartVisible ~= false -- Default true
-	window.ToggleKey = options.ToggleKey or Enum.KeyCode.Insert
-	window.Colors = table.clone(DEFAULT_COLORS) -- Clone defaults
-	if options.Colors then
-		for k, v in pairs(options.Colors) do
-			window.Colors[k] = v -- Override with user colors
+	titleBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			dragInput = input
 		end
-	end
-	window.AnimationSpeed = options.AnimationSpeed or DEFAULT_ANIMATION_SPEED
-	window.EaseStyle = options.EaseStyle or DEFAULT_EASE_STYLE
-	window.EaseDirection = options.EaseDirection or DEFAULT_EASE_DIRECTION
+	end)
 
-	window._screenGui = nil
-	window._mainFrame = nil
-	window._titleBar = nil
-	window._sidebar = nil
-	window._contentArea = nil
-	window._categories = {} -- Stores { button = ButtonFrame, section = SectionFrame, widgets = {} }
-	window._menuButtons = {} -- Stores references to sidebar button parts { frame, icon, label, highlight }
-	window._activeCategory = nil
-	window._isMinimized = false
-	window._dragging = false
-	window._dragInput = nil
-	window._dragStart = nil
-	window._startPos = nil
-	window._connections = {} -- To store event connections for later cleanup
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			updateDrag(input)
+		end
+	end)
 
-	window:_createBaseUI()
-	window:_setupInteractions()
+	-- Close button behavior
+	closeButton.MouseEnter:Connect(function() tween(closeButton, { TextColor3 = Color3.fromRGB(255, 100, 100) }, TweenInfo.new(0.2)):Play() end)
+	closeButton.MouseLeave:Connect(function() tween(closeButton, { TextColor3 = Library.Settings.TextColor }, TweenInfo.new(0.2)):Play() end)
+	closeButton.MouseButton1Click:Connect(function()
+		tween(mainFrame, { Size = UDim2.new(size.X.Scale, size.X.Offset, 0, 0), Position = UDim2.new(position.X.Scale, position.X.Offset, 0.5, 0) }, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)):Play()
+		task.wait(0.3)
+		screenGui:Destroy()
+	end)
 
-	if window.StartVisible then
-		window:Show()
-	else
-		window._screenGui.Enabled = false
-		window._mainFrame.Visible = false -- Hide instantly if not starting visible
-	end
+	-- Minimize button behavior
+	local isMinimized = false
+	minimizeButton.MouseEnter:Connect(function() tween(minimizeButton, { TextColor3 = Color3.fromRGB(100, 200, 255) }, TweenInfo.new(0.2)):Play() end)
+	minimizeButton.MouseLeave:Connect(function() tween(minimizeButton, { TextColor3 = Library.Settings.TextColor }, TweenInfo.new(0.2)):Play() end)
+	minimizeButton.MouseButton1Click:Connect(function()
+		isMinimized = not isMinimized
+		if isMinimized then
+			sidebarContainer.Visible = false
+			contentArea.Visible = false
+			tween(mainFrame, { Size = UDim2.new(size.X.Scale, size.X.Offset, 0, 30) }, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)):Play()
+			minimizeButton.Text = "+"
+		else
+			tween(mainFrame, { Size = size }, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)):Play()
+			task.wait(0.1) -- Wait slightly for frame to resize before making children visible
+			sidebarContainer.Visible = true
+			contentArea.Visible = true
+			minimizeButton.Text = "−"
+		end
+	end)
 
-	return window
+	return {
+		screenGui = screenGui,
+		mainFrame = mainFrame,
+		titleBar = titleBar,
+		contentArea = contentArea,
+		sidebarContainer = sidebarContainer,
+        closeButton = closeButton,
+        minimizeButton = minimizeButton
+	}
 end
 
--- ==================================================
--- Window Methods
--- ==================================================
+--[[
+	Adds the sidebar frame itself.
+	@param sidebarContainer The container frame returned by CreateWindow.
+	@returns The sidebar frame.
+]]
+function Library.AddSidebar(sidebarContainer)
+    local sidebar = Instance.new("Frame")
+	sidebar.Name = "Sidebar"
+	sidebar.Size = UDim2.new(1, 0, 1, 0) -- Fill the container
+	sidebar.BackgroundColor3 = Library.Settings.SecondaryBackgroundColor
+	sidebar.BorderSizePixel = 0
+	sidebar.Parent = sidebarContainer
+    return sidebar
+end
 
-function SharkUI:AddCategory(categoryName, iconData)
-	if not self._sidebar or not self._contentArea then
-		warn("SharkUI: Cannot add category before base UI is created.")
-		return nil
-	end
-	if self._categories[categoryName] then
-		warn("SharkUI: Category '" .. categoryName .. "' already exists.")
-		return self._categories[categoryName]
-	end
+--[[
+	Adds a logo area to the sidebar.
+	@param sidebar The sidebar frame returned by AddSidebar.
+	@param logoText The text to display below the logo.
+]]
+function Library.AddLogo(sidebar, logoText)
+	local logoArea = Instance.new("Frame")
+	logoArea.Name = "LogoArea"
+	logoArea.Size = UDim2.new(1, 0, 0, 110)
+	logoArea.BackgroundTransparency = 1
+	logoArea.Parent = sidebar
 
-	local category = {}
-	local index = #self._categories + 1
-	local colors = self.Colors
+	local sharkLogo = Instance.new("Frame")
+	sharkLogo.Name = "SharkLogo"
+	sharkLogo.Size = UDim2.new(0, 60, 0, 60)
+	sharkLogo.Position = UDim2.new(0.5, -30, 0, 15)
+	sharkLogo.BackgroundTransparency = 1
+	sharkLogo.Parent = logoArea
 
-	-- 1. Create Sidebar Button
-	local buttonFrame = createInstance("Frame", {
-		Name = categoryName .. "Button",
-		Size = UDim2.new(1, 0, 0, 40),
-		Position = UDim2.new(0, 0, 0, 110 + (#self._menuButtons) * 40),
-		BackgroundTransparency = 1,
-		Parent = self._sidebar,
-	})
+	local logoTriangle = Instance.new("Frame")
+	logoTriangle.Name = "LogoTriangle"
+	logoTriangle.Size = UDim2.new(0, 50, 0, 40)
+	logoTriangle.Position = UDim2.new(0.5, -25, 0.5, -20)
+	logoTriangle.BackgroundTransparency = 1
+	logoTriangle.Parent = sharkLogo
 
-	local iconButton = createInstance("ImageButton", {
-		Name = "Icon",
-		Size = UDim2.new(0, 24, 0, 24),
-		Position = UDim2.new(0, 30, 0.5, -12),
-		BackgroundTransparency = 1,
-		Image = iconData.Id or "rbxassetid://3926305904", -- Default icon if needed
-		ImageRectOffset = iconData.Offset or Vector2.new(644, 364), -- Default icon offset
-		ImageRectSize = iconData.Size or Vector2.new(36, 36),
-		ImageColor3 = colors.TextMuted,
-		Parent = buttonFrame,
-	})
+	local uiGradient = Instance.new("UIGradient")
+	uiGradient.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0),NumberSequenceKeypoint.new(0.5, 0),NumberSequenceKeypoint.new(0.5001, 1),NumberSequenceKeypoint.new(1, 1)})
+	uiGradient.Rotation = 45
+	uiGradient.Parent = logoTriangle
 
-	local label = createInstance("TextLabel", {
-		Name = "Label",
-		Size = UDim2.new(0, 100, 1, 0),
-		Position = UDim2.new(0, 65, 0, 0),
-		BackgroundTransparency = 1,
-		Text = categoryName,
-		TextColor3 = colors.TextMuted,
-		TextSize = 14,
-		Font = Enum.Font.Gotham,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = buttonFrame,
-	})
+	local uiStroke = Instance.new("UIStroke")
+	uiStroke.Color = Library.Settings.TextColor
+	uiStroke.Thickness = 2
+	uiStroke.Parent = logoTriangle
 
-	local hoverHighlight = createInstance("Frame", {
-		Name = "HoverHighlight",
-		Size = UDim2.new(0.95, 0, 0.8, 0),
-		Position = UDim2.new(0.025, 0, 0.1, 0),
-		BackgroundColor3 = colors.Accent,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 0,
-		Parent = buttonFrame,
-	})
-	createInstance("UICorner", { CornerRadius = UDim.new(0, 6), Parent = hoverHighlight })
+	local logoTextLabel = Instance.new("TextLabel")
+	logoTextLabel.Name = "LogoText"
+	logoTextLabel.Size = UDim2.new(1, 0, 0, 30)
+	logoTextLabel.Position = UDim2.new(0, 0, 0, 80)
+	logoTextLabel.BackgroundTransparency = 1
+	logoTextLabel.Text = logoText
+	logoTextLabel.TextColor3 = Library.Settings.TextColor
+	logoTextLabel.TextSize = 18
+	logoTextLabel.Font = Library.Settings.FontBold
+	logoTextLabel.Parent = logoArea
 
-	self._menuButtons[categoryName] = {
-		frame = buttonFrame,
-		icon = iconButton,
+    return logoArea
+end
+
+--[[
+	Adds a category button to the sidebar.
+	@param sidebar The sidebar frame.
+	@param name The category name (used for identification and label).
+	@param iconData Table containing { id, offset, size } for the icon.
+	@param layoutOrder The LayoutOrder for this button.
+	@param onClickCallback Function to call when the button is clicked, passes `name`.
+    @returns Table containing { buttonFrame, iconButton, label, highlight }
+]]
+function Library.AddCategoryButton(sidebar, name, iconData, layoutOrder, onClickCallback)
+	local buttonFrame = Instance.new("Frame")
+	buttonFrame.Name = name .. "Button"
+	buttonFrame.Size = UDim2.new(1, 0, 0, 40)
+	-- Position will be handled by UIListLayout in the calling script
+	buttonFrame.BackgroundTransparency = 1
+    buttonFrame.LayoutOrder = layoutOrder
+	buttonFrame.Parent = sidebar
+
+	local iconButton = Instance.new("ImageButton")
+	iconButton.Name = "Icon"
+	iconButton.Size = UDim2.new(0, 24, 0, 24)
+	iconButton.Position = UDim2.new(0, 30, 0.5, -12)
+	iconButton.BackgroundTransparency = 1
+	iconButton.Image = iconData.id
+	iconButton.ImageRectOffset = iconData.offset
+	iconButton.ImageRectSize = iconData.size or Vector2.new(36, 36) -- Default size
+	iconButton.ImageColor3 = Library.Settings.InactiveColor -- Start inactive
+	iconButton.Parent = buttonFrame
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(0, 100, 1, 0)
+	label.Position = UDim2.new(0, 65, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = name
+	label.TextColor3 = Library.Settings.InactiveColor -- Start inactive
+	label.TextSize = 14
+	label.Font = Library.Settings.Font
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = buttonFrame
+
+	local hoverHighlight = Instance.new("Frame")
+	hoverHighlight.Name = "HoverHighlight"
+	hoverHighlight.Size = UDim2.new(0.95, 0, 0.8, 0)
+	hoverHighlight.Position = UDim2.new(0.025, 0, 0.1, 0)
+	hoverHighlight.BackgroundColor3 = Library.Settings.ThemeColor
+	hoverHighlight.BackgroundTransparency = 1 -- Start hidden
+	hoverHighlight.BorderSizePixel = 0
+	hoverHighlight.ZIndex = 0
+	hoverHighlight.Parent = buttonFrame
+
+	local uiCorner = Instance.new("UICorner")
+	uiCorner.CornerRadius = UDim.new(0, 6)
+	uiCorner.Parent = hoverHighlight
+
+    local isSelected = false -- Track selection state
+
+    local function updateVisuals(selected)
+        local iconColor = selected and Library.Settings.ThemeColor or Library.Settings.InactiveColor
+        local textColor = selected and Library.Settings.TextColor or Library.Settings.InactiveColor
+        local highlightTransparency = selected and 0.8 or 1
+
+        -- Apply immediately (no tween needed for selection state change)
+        iconButton.ImageColor3 = iconColor
+        label.TextColor3 = textColor
+        hoverHighlight.BackgroundTransparency = highlightTransparency
+    end
+
+	buttonFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if onClickCallback then onClickCallback(name) end
+		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+			if not isSelected then -- Only show hover if not selected
+                tween(hoverHighlight, { BackgroundTransparency = 0.8 }, TweenInfo.new(0.2)):Play()
+            end
+		end
+	end)
+
+	buttonFrame.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+            if not isSelected then -- Only hide hover if not selected
+			    tween(hoverHighlight, { BackgroundTransparency = 1 }, TweenInfo.new(0.2)):Play()
+            end
+		end
+	end)
+
+	iconButton.MouseButton1Click:Connect(function()
+		if onClickCallback then onClickCallback(name) end
+	end)
+
+	return {
+		buttonFrame = buttonFrame,
+		iconButton = iconButton,
 		label = label,
 		highlight = hoverHighlight,
+        -- Function to visually update the button based on selection state
+        SetSelected = function(selected)
+            isSelected = selected
+            updateVisuals(selected)
+        end
 	}
+end
 
-	-- 2. Create Content Section Frame
-	local sectionFrame = createInstance("Frame", {
-		Name = categoryName .. "Section",
-		Size = UDim2.new(1, -20, 1, -20), -- Padding
-		Position = UDim2.new(0, 10, 0, 10),
-		BackgroundTransparency = 1,
-		Visible = false, -- Initially hidden
-		Parent = self._contentArea,
-		ClipsDescendants = true,
-	})
+--[[
+	Adds a content section (usually a scrolling frame) to the content area.
+	@param contentArea The content area frame returned by CreateWindow.
+	@param sectionName The name for the section frame.
+    @param isVisible Should this section be visible initially?
+	@returns Table containing { sectionFrame, scrollFrame, listLayout }
+]]
+function Library.AddSection(contentArea, sectionName, isVisible)
+	local sectionFrame = Instance.new("Frame")
+	sectionFrame.Name = sectionName .. "Section"
+	sectionFrame.Size = UDim2.new(1, -20, 1, -20)
+	sectionFrame.Position = UDim2.new(0, 10, 0, 10)
+	sectionFrame.BackgroundTransparency = 1
+	sectionFrame.Visible = isVisible
+	sectionFrame.Parent = contentArea
 
-	local sectionTitle = createInstance("TextLabel", {
-		Name = categoryName .. "Title",
-		Size = UDim2.new(1, 0, 0, 30),
-		Position = UDim2.new(0, 0, 0, 0),
-		BackgroundTransparency = 1,
-		Text = categoryName,
-		TextColor3 = colors.Text,
-		TextSize = 16,
-		Font = Enum.Font.GothamBold,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = sectionFrame,
-	})
+	local sectionTitle = Instance.new("TextLabel")
+	sectionTitle.Name = sectionName .. "Title"
+	sectionTitle.Size = UDim2.new(1, 0, 0, 30)
+	sectionTitle.BackgroundTransparency = 1
+	sectionTitle.Text = sectionName
+	sectionTitle.TextColor3 = Library.Settings.TextColor
+	sectionTitle.TextSize = 16
+	sectionTitle.Font = Library.Settings.FontBold
+	sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+	sectionTitle.Parent = sectionFrame
 
-	-- 3. Create Scrolling Frame inside Content Section
-	local scrollFrame, listLayout = createScrollingFrame(sectionFrame, categoryName .. "Scroll", UDim2.new(0, 0, 0, 40), UDim2.new(1, 0, 1, -40), colors)
+	local scrollFrame = Instance.new("ScrollingFrame")
+	scrollFrame.Name = "ScrollingContent"
+	scrollFrame.Size = UDim2.new(1, 0, 1, -40)
+	scrollFrame.Position = UDim2.new(0, 0, 0, 40)
+	scrollFrame.BackgroundTransparency = 1
+	scrollFrame.BorderSizePixel = 0
+	scrollFrame.ScrollBarThickness = Library.Settings.ScrollBarThickness
+	scrollFrame.ScrollBarImageColor3 = Library.Settings.ThemeColor
+	scrollFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+	scrollFrame.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
+	scrollFrame.Parent = sectionFrame
 
-	-- 4. Store Category Data
-	category.Name = categoryName
-	category.SectionFrame = sectionFrame
-	category.ScrollFrame = scrollFrame
-	category.ListLayout = listLayout
-	category.Widgets = {} -- Store widgets added to this category
-	category._widgetCounter = 0 -- For LayoutOrder
-	category._window = self -- Reference back to the window
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Padding = UDim.new(0, 6)
+	listLayout.Parent = scrollFrame
 
-	self._categories[categoryName] = category
+	local uiPadding = Instance.new("UIPadding")
+	uiPadding.PaddingTop = UDim.new(0, 5)
+	uiPadding.PaddingLeft = UDim.new(0, 5)
+	uiPadding.PaddingRight = UDim.new(0, 5)
+	uiPadding.Parent = scrollFrame
 
-	-- 5. Connect Sidebar Button Interaction
-	local function handleClick()
-		self:SelectCategory(categoryName)
-	end
-
-	local con1 = buttonFrame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			handleClick()
-		elseif input.UserInputType == Enum.UserInputType.MouseMovement then
-			TweenService:Create(hoverHighlight, TweenInfo.new(0.2), { BackgroundTransparency = 0.8 }):Play()
-		end
+	listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
 	end)
-	local con2 = buttonFrame.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			TweenService:Create(hoverHighlight, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
-		end
-	end)
-	local con3 = iconButton.MouseButton1Click:Connect(handleClick)
-	table.insert(self._connections, con1)
-	table.insert(self._connections, con2)
-	table.insert(self._connections, con3)
 
-
-	-- Select the first category added by default
-	if not self._activeCategory then
-		self:SelectCategory(categoryName, true) -- Select instantly
-	end
-
-	-- Return a category object for adding widgets
-	return setmetatable(category, { __index = SharkUI.CategoryMethods })
-end
-
-function SharkUI:SelectCategory(categoryName, instant)
-	local categoryData = self._categories[categoryName]
-	if not categoryData or categoryName == self._activeCategory then
-		return -- Do nothing if category doesn't exist or is already active
-	end
-
-	local colors = self.Colors
-	local tweenInfo = instant and TweenInfo.new(0) or TweenInfo.new(self.AnimationSpeed / 2, self.EaseStyle, self.EaseDirection)
-
-	-- Update Sidebar Buttons Visuals
-	for name, buttonInfo in pairs(self._menuButtons) do
-		local isSelected = (name == categoryName)
-		local targetIconColor = isSelected and colors.Accent or colors.TextMuted
-		local targetTextColor = isSelected and colors.Text or colors.TextMuted
-		local targetHighlightTransparency = isSelected and 0.8 or 1
-
-		TweenService:Create(buttonInfo.icon, tweenInfo, { ImageColor3 = targetIconColor }):Play()
-		TweenService:Create(buttonInfo.label, tweenInfo, { TextColor3 = targetTextColor }):Play()
-		TweenService:Create(buttonInfo.highlight, tweenInfo, { BackgroundTransparency = targetHighlightTransparency }):Play()
-	end
-
-	-- Hide previously active section (if any)
-	if self._activeCategory and self._categories[self._activeCategory] then
-		local oldSection = self._categories[self._activeCategory].SectionFrame
-		if not instant then
-			-- Optional: Add slide-out animation if desired
-			-- TweenService:Create(oldSection, tweenInfo, { Position = UDim2.new(0, -20, 0, 10), Transparency = 1 }):Play()
-			oldSection.Visible = false -- Simple hide for now
-		else
-			oldSection.Visible = false
-		end
-	end
-
-	-- Show the new section
-	local newSection = categoryData.SectionFrame
-	if not instant then
-		-- Optional: Add slide-in animation if desired
-		-- newSection.Position = UDim2.new(0, 20, 0, 10)
-		-- newSection.Transparency = 1
-		newSection.Visible = true
-		-- TweenService:Create(newSection, tweenInfo, { Position = UDim2.new(0, 10, 0, 10), Transparency = 0 }):Play()
-	else
-		newSection.Position = UDim2.new(0, 10, 0, 10)
-		newSection.Transparency = 0
-		newSection.Visible = true
-	end
-
-
-	self._activeCategory = categoryName
-end
-
-function SharkUI:Show(animate)
-	if self._screenGui.Enabled and self._mainFrame.Visible and animate ~= false then return end -- Already visible
-
-	animate = animate ~= false -- Default true
-	local tweenInfo = TweenInfo.new(self.AnimationSpeed * 1.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-
-	-- Reset state before showing
-	self._mainFrame.Size = animate and UDim2.new(self.Size.X.Scale, self.Size.X.Offset, 0, 0) or self.Size
-	self._mainFrame.Position = animate and UDim2.new(0.5, -self.Size.X.Offset / 2, 0.5, 0) or UDim2.new(0.5, -self.Size.X.Offset / 2, 0.5, -self.Size.Y.Offset / 2)
-	self._mainFrame.Visible = true
-	self._screenGui.Enabled = true
-
-	if self._isMinimized then -- If minimized, just show title bar
-		self._mainFrame.Size = UDim2.new(self.Size.X.Scale, self.Size.X.Offset, 0, 30)
-		self._mainFrame.Position = UDim2.new(0.5, -self.Size.X.Offset / 2, 0.5, -self.Size.Y.Offset / 2) -- Position correctly even when minimized
-	else
-		self._sidebar.Visible = true
-		self._contentArea.Visible = true
-		if animate then
-			TweenService:Create(self._mainFrame, tweenInfo, {
-				Size = self.Size,
-				Position = UDim2.new(0.5, -self.Size.X.Offset / 2, 0.5, -self.Size.Y.Offset / 2)
-			}):Play()
-		end
-	end
-end
-
-function SharkUI:Hide(animate)
-	if not self._screenGui.Enabled then return end -- Already hidden
-
-	animate = animate ~= false -- Default true
-	local tweenInfo = TweenInfo.new(self.AnimationSpeed, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-
-	if animate then
-		local targetPosition = self._isMinimized and self._mainFrame.Position or UDim2.new(0.5, -self.Size.X.Offset / 2, 0.5, 0)
-		local targetSize = self._isMinimized and self._mainFrame.Size or UDim2.new(self.Size.X.Scale, self.Size.X.Offset, 0, 0)
-
-		local tween = TweenService:Create(self._mainFrame, tweenInfo, {
-			Size = targetSize,
-			Position = targetPosition
-		})
-		tween.Completed:Connect(function()
-			if self._screenGui then -- Check if not destroyed
-				self._screenGui.Enabled = false
-				self._mainFrame.Visible = false -- Ensure fully hidden
-			end
-		end)
-		tween:Play()
-	else
-		self._screenGui.Enabled = false
-		self._mainFrame.Visible = false
-	end
-end
-
-function SharkUI:Toggle()
-	if self._screenGui.Enabled then
-		self:Hide()
-	else
-		self:Show()
-	end
-end
-
-function SharkUI:Destroy()
-	-- Disconnect all events
-	for _, connection in ipairs(self._connections) do
-		connection:Disconnect()
-	end
-	self._connections = {} -- Clear the table
-
-	if self._screenGui then
-		self._screenGui:Destroy()
-	end
-
-	-- Clear references
-	for k in pairs(self) do
-		self[k] = nil
-	end
-	setmetatable(self, nil) -- Remove metatable
-end
-
-function SharkUI:SetColor(colorName, colorValue)
-	if not DEFAULT_COLORS[colorName] then
-		warn("SharkUI: Invalid color name '"..tostring(colorName).."'")
-		return
-	end
-	self.Colors[colorName] = colorValue
-	self:_updateColors() -- Apply the color change to the UI elements
-end
-
--- ==================================================
--- Internal Helper Methods (_ prefix)
--- ==================================================
-
-function SharkUI:_createBaseUI()
-	local colors = self.Colors
-
-	self._screenGui = createInstance("ScreenGui", {
-		Name = self.Name .. "ScreenGui",
-		ResetOnSpawn = false,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		Parent = PlayerGui,
-		Enabled = false, -- Start disabled, enable with Show()
-	})
-
-	self._mainFrame = createInstance("Frame", {
-		Name = "MainFrame",
-		Size = self.Size,
-		Position = UDim2.new(0.5, -self.Size.X.Offset / 2, 0.5, -self.Size.Y.Offset / 2),
-		BackgroundColor3 = colors.Background,
-		BorderSizePixel = 0,
-		Parent = self._screenGui,
-		Visible = false, -- Start invisible
-		ClipsDescendants = true, -- Important for animations/minimize
-	})
-
-	self._titleBar = createInstance("Frame", {
-		Name = "TitleBar",
-		Size = UDim2.new(1, 0, 0, 30),
-		BackgroundColor3 = colors.TitleBar,
-		BorderSizePixel = 0,
-		Parent = self._mainFrame,
-	})
-
-	local titleText = createInstance("TextLabel", {
-		Name = "TitleText",
-		Size = UDim2.new(1, -100, 1, 0),
-		Position = UDim2.new(0, 10, 0, 0),
-		BackgroundTransparency = 1,
-		Text = self.Title,
-		TextColor3 = colors.Text,
-		TextSize = 16,
-		Font = Enum.Font.GothamBold,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = self._titleBar,
-	})
-
-	if self.Closable then
-		self._closeButton = createInstance("TextButton", {
-			Name = "CloseButton",
-			Size = UDim2.new(0, 30, 0, 30),
-			Position = UDim2.new(1, -30, 0, 0),
-			BackgroundTransparency = 1,
-			Text = "✕",
-			TextColor3 = colors.Text,
-			TextSize = 16,
-			Font = Enum.Font.GothamBold,
-			Parent = self._titleBar,
-		})
-	end
-
-	if self.Minimizable then
-		self._minimizeButton = createInstance("TextButton", {
-			Name = "MinimizeButton",
-			Size = UDim2.new(0, 30, 0, 30),
-			Position = UDim2.new(1, -60, 0, 0),
-			BackgroundTransparency = 1,
-			Text = "−",
-			TextColor3 = colors.Text,
-			TextSize = 16,
-			Font = Enum.Font.GothamBold,
-			Parent = self._titleBar,
-		})
-	end
-
-	self._sidebar = createInstance("Frame", {
-		Name = "Sidebar",
-		Size = UDim2.new(0, 165, 1, -30),
-		Position = UDim2.new(0, 0, 0, 30),
-		BackgroundColor3 = colors.Sidebar,
-		BorderSizePixel = 0,
-		Parent = self._mainFrame,
-	})
-
-	-- Logo Area (Optional - customize as needed)
-	local logoArea = createInstance("Frame", {
-		Name = "LogoArea",
-		Size = UDim2.new(1, 0, 0, 110),
-		BackgroundTransparency = 1,
-		Parent = self._sidebar,
-	})
-	-- Add your specific logo elements here if desired, example:
-	local logoText = createInstance("TextLabel", {
-		Name = "LogoText", Size = UDim2.new(1, 0, 1, 0), Position = UDim2.new(0, 0, 0, 0),
-		BackgroundTransparency = 1, Text = self.Title, TextColor3 = colors.Text,
-		TextSize = 18, Font = Enum.Font.GothamBold, Parent = logoArea
-	})
-
-
-	self._contentArea = createInstance("Frame", {
-		Name = "ContentArea",
-		Size = UDim2.new(1, -165, 1, -30),
-		Position = UDim2.new(0, 165, 0, 30),
-		BackgroundTransparency = 1,
-		Parent = self._mainFrame,
-		ClipsDescendants = true,
-	})
-end
-
-function SharkUI:_setupInteractions()
-	local colors = self.Colors
-	local tweenInfoHover = TweenInfo.new(0.2)
-
-	-- Dragging
-	if self.Draggable then
-		local function updateDrag(input)
-			local delta = input.Position - self._dragStart
-			local targetPosition = UDim2.new(self._startPos.X.Scale, self._startPos.X.Offset + delta.X, self._startPos.Y.Scale, self._startPos.Y.Offset + delta.Y)
-			-- Use Tween for smoother dragging, short duration
-			TweenService:Create(self._mainFrame, TweenInfo.new(0.05), { Position = targetPosition }):Play()
-		end
-
-		local con1 = self._titleBar.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				self._dragging = true
-				self._dragStart = input.Position
-				self._startPos = self._mainFrame.Position
-				TweenService:Create(self._titleBar, tweenInfoHover, { BackgroundColor3 = colors.TitleBar:Lerp(Color3.new(0,0,0), 0.2) }):Play() -- Darken slightly
-
-				local connectionChanged
-				connectionChanged = input.Changed:Connect(function()
-					if input.UserInputState == Enum.UserInputState.End then
-						self._dragging = false
-						TweenService:Create(self._titleBar, tweenInfoHover, { BackgroundColor3 = colors.TitleBar }):Play()
-						connectionChanged:Disconnect() -- Disconnect self
-						-- Remove from main connections table if tracked specifically
-					end
-				end)
-                table.insert(self._connections, connectionChanged) -- Track for cleanup
-			end
-		end)
-		table.insert(self._connections, con1)
-
-		local con2 = self._titleBar.InputChanged:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseMovement then
-				self._dragInput = input
-			end
-		end)
-		table.insert(self._connections, con2)
-
-		-- Use UserInputService for smoother global tracking while dragging
-		local con3 = UserInputService.InputChanged:Connect(function(input)
-			if input == self._dragInput and self._dragging then
-				updateDrag(input)
-			end
-		end)
-        table.insert(self._connections, con3)
-
-        -- Need to handle mouse button up globally too in case mouse is released outside titlebar
-		local con4 = UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 and self._dragging then
-                self._dragging = false
-				TweenService:Create(self._titleBar, tweenInfoHover, { BackgroundColor3 = colors.TitleBar }):Play()
-            end
-		end)
-        table.insert(self._connections, con4)
-	end
-
-	-- Close Button
-	if self.Closable and self._closeButton then
-		local btn = self._closeButton
-		local con1 = btn.MouseEnter:Connect(function() TweenService:Create(btn, tweenInfoHover, { TextColor3 = colors.CloseHover }):Play() end)
-		local con2 = btn.MouseLeave:Connect(function() TweenService:Create(btn, tweenInfoHover, { TextColor3 = colors.Text }):Play() end)
-		local con3 = btn.MouseButton1Click:Connect(function() self:Destroy() end) -- Destroy by default, or call a callback if needed
-		table.insert(self._connections, con1)
-		table.insert(self._connections, con2)
-		table.insert(self._connections, con3)
-	end
-
-	-- Minimize Button
-	if self.Minimizable and self._minimizeButton then
-		local btn = self._minimizeButton
-		local con1 = btn.MouseEnter:Connect(function() TweenService:Create(btn, tweenInfoHover, { TextColor3 = colors.MinimizeHover }):Play() end)
-		local con2 = btn.MouseLeave:Connect(function() TweenService:Create(btn, tweenInfoHover, { TextColor3 = colors.Text }):Play() end)
-		local con3 = btn.MouseButton1Click:Connect(function() self:_toggleMinimize() end)
-		table.insert(self._connections, con1)
-		table.insert(self._connections, con2)
-		table.insert(self._connections, con3)
-	end
-
-	-- Keybind Toggle
-	if self.ToggleKey then
-		local con = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-			if not gameProcessed and input.KeyCode == self.ToggleKey then
-				self:Toggle()
-			end
-		end)
-		table.insert(self._connections, con)
-	end
-end
-
-function SharkUI:_toggleMinimize()
-	local colors = self.Colors
-	local tweenInfo = TweenInfo.new(self.AnimationSpeed, Enum.EasingStyle.Back, self._isMinimized and Enum.EasingDirection.Out or Enum.EasingDirection.In)
-	local targetSize
-	local targetSidebarVisible
-	local targetContentVisible
-	local targetButtonText
-
-	if self._isMinimized then
-		targetSize = self.Size
-		targetSidebarVisible = true
-		targetContentVisible = true
-		targetButtonText = "−"
-	else
-		targetSize = UDim2.new(self.Size.X.Scale, self.Size.X.Offset, 0, 30) -- Title bar height
-		targetSidebarVisible = false
-		targetContentVisible = false
-		targetButtonText = "+"
-	end
-
-	self._isMinimized = not self._isMinimized
-
-	-- Hide content instantly before animating size
-	if not targetSidebarVisible then
-		self._sidebar.Visible = false
-		self._contentArea.Visible = false
-	end
-
-	local tween = TweenService:Create(self._mainFrame, tweenInfo, { Size = targetSize })
-	tween.Completed:Connect(function()
-		-- Show content after animation completes if restoring
-		if targetSidebarVisible then
-			self._sidebar.Visible = true
-			self._contentArea.Visible = true
-		end
-		if self._minimizeButton then self._minimizeButton.Text = targetButtonText end
-	end)
-	tween:Play()
-end
-
-function SharkUI:_updateColors()
-	-- This function needs to iterate through relevant UI elements and apply the new colors
-	-- from self.Colors. This can be complex if you want to update everything live.
-	-- Example snippets:
-	local colors = self.Colors
-	if self._mainFrame then self._mainFrame.BackgroundColor3 = colors.Background end
-	if self._titleBar then self._titleBar.BackgroundColor3 = colors.TitleBar end
-	if self._sidebar then self._sidebar.BackgroundColor3 = colors.Sidebar end
-	if self._titleBar and self._titleBar:FindFirstChild("TitleText") then self._titleBar.TitleText.TextColor3 = colors.Text end
-	if self._closeButton then self._closeButton.TextColor3 = colors.Text end -- Reset hover state logic needed
-	if self._minimizeButton then self._minimizeButton.TextColor3 = colors.Text end -- Reset hover state logic needed
-
-	-- Update category buttons
-	for name, buttonInfo in pairs(self._menuButtons) do
-		local isSelected = (name == self._activeCategory)
-		buttonInfo.icon.ImageColor3 = isSelected and colors.Accent or colors.TextMuted
-		buttonInfo.label.TextColor3 = isSelected and colors.Text or colors.TextMuted
-		buttonInfo.highlight.BackgroundColor3 = colors.Accent
-	end
-
-	-- Update widgets (requires iterating through all widgets in all categories)
-	for _, category in pairs(self._categories) do
-		for _, widget in pairs(category.Widgets) do
-			if widget.Type == "Toggle" and widget.Elements.toggleButton then
-				widget.Elements.toggleButton.BackgroundColor3 = widget.Value and colors.Accent or colors.ToggleOff
-				widget.Elements.optionLabel.TextColor3 = colors.Text
-			elseif widget.Type == "Slider" and widget.Elements.fill then
-				widget.Elements.fill.BackgroundColor3 = colors.Accent
-				widget.Elements.track.BackgroundColor3 = colors.SliderTrack
-				widget.Elements.label.TextColor3 = colors.Text
-				widget.Elements.valueLabel.TextColor3 = colors.Text
-			elseif widget.Type == "ColorPicker" and widget.Elements.preview then
-				widget.Elements.preview.BackgroundColor3 = widget.Value -- Value is the Color3
-				widget.Elements.label.TextColor3 = colors.Text
-				-- Update popup colors too if needed
-			end
-		end
-		-- Update scrollbar color
-		if category.ScrollFrame then category.ScrollFrame.ScrollBarImageColor3 = colors.Accent end
-	end
-
-	-- Update theme-dependent colors (like the accent color in color pickers)
-	-- You might need more specific logic here depending on how deep the color changes go.
-	print("SharkUI: Colors updated (basic implementation).")
-end
-
--- ==================================================
--- Category Methods (Accessed via Category object)
--- ==================================================
-SharkUI.CategoryMethods = {}
-
-function SharkUI.CategoryMethods:AddToggle(optionName, defaultValue, callback)
-	local category = self
-	local window = category._window
-	local colors = window.Colors
-	category._widgetCounter = category._widgetCounter + 1
-
-	local isEnabled = defaultValue == true
-	local elements = {} -- Store references to UI elements for this widget
-
-	local optionFrame = createInstance("Frame", {
-		Name = optionName .. "Option",
-		Size = UDim2.new(1, 0, 0, 30),
-		BackgroundTransparency = 1,
-		LayoutOrder = category._widgetCounter,
-		Parent = category.ScrollFrame,
-	})
-	elements.frame = optionFrame
-
-	local optionLabel = createInstance("TextLabel", {
-		Name = "Label",
-		Size = UDim2.new(1, -50, 1, 0),
-		BackgroundTransparency = 1,
-		Text = optionName,
-		TextColor3 = colors.Text,
-		TextSize = 14,
-		Font = Enum.Font.Gotham,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = optionFrame,
-	})
-	elements.optionLabel = optionLabel
-
-	local toggleButton = createInstance("Frame", {
-		Name = "ToggleButton",
-		Size = UDim2.new(0, 40, 0, 20),
-		Position = UDim2.new(1, -45, 0.5, -10),
-		BackgroundColor3 = isEnabled and colors.Accent or colors.ToggleOff,
-		BorderSizePixel = 0,
-		Parent = optionFrame,
-	})
-	elements.toggleButton = toggleButton
-	createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = toggleButton })
-
-	local toggleIndicator = createInstance("Frame", {
-		Name = "Indicator",
-		Size = UDim2.new(0, 16, 0, 16),
-		Position = isEnabled and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8),
-		BackgroundColor3 = colors.Text, -- White indicator
-		BorderSizePixel = 0,
-		Parent = toggleButton,
-	})
-	elements.indicator = toggleIndicator
-	createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = toggleIndicator })
-
-	local widgetData = {
-		Name = optionName,
-		Type = "Toggle",
-		Value = isEnabled,
-		Callback = callback,
-		Elements = elements
+	return {
+		sectionFrame = sectionFrame,
+		scrollFrame = scrollFrame,
+		listLayout = listLayout
 	}
-	table.insert(category.Widgets, widgetData)
-
-	-- Interaction
-	local con = toggleButton.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			widgetData.Value = not widgetData.Value -- Toggle the internal state
-
-			-- Animate
-			local newColor = widgetData.Value and colors.Accent or colors.ToggleOff
-			local newPosition = widgetData.Value and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
-			local tweenInfo = TweenInfo.new(0.2)
-
-			TweenService:Create(toggleButton, tweenInfo, { BackgroundColor3 = newColor }):Play()
-			TweenService:Create(toggleIndicator, tweenInfo, { Position = newPosition }):Play()
-
-			-- Execute callback
-			if widgetData.Callback then
-				task.spawn(widgetData.Callback, widgetData.Value) -- Use task.spawn for safety
-			end
-		end
-	end)
-	table.insert(window._connections, con) -- Track connection
-
-	return widgetData -- Return widget data for potential external control
 end
 
+--[[
+	Adds a toggle switch element.
+	@param parent The parent frame (usually a scrollFrame).
+	@param optionName The label text and identifier.
+	@param isEnabledDefault The initial state of the toggle.
+	@param layoutOrder The LayoutOrder for this element.
+	@param onChangeCallback Function called when toggled, passes `optionName, isEnabled`.
+	@returns Table containing { optionFrame, toggleButton, indicator, label }
+]]
+function Library.AddToggle(parent, optionName, isEnabledDefault, layoutOrder, onChangeCallback)
+	local optionFrame = Instance.new("Frame")
+	optionFrame.Name = optionName .. "Option"
+	optionFrame.Size = UDim2.new(1, 0, 0, 30)
+	optionFrame.BackgroundTransparency = 1
+	optionFrame.LayoutOrder = layoutOrder
+	optionFrame.Parent = parent
 
-function SharkUI.CategoryMethods:AddSlider(sliderName, minValue, maxValue, defaultValue, callback)
-	local category = self
-	local window = category._window
-	local colors = window.Colors
-	category._widgetCounter = category._widgetCounter + 1
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, -50, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = optionName
+	label.TextColor3 = Library.Settings.TextColor
+	label.TextSize = 14
+	label.Font = Library.Settings.Font
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = optionFrame
 
-	defaultValue = math.clamp(defaultValue, minValue, maxValue)
-	local currentRatio = (defaultValue - minValue) / (maxValue - minValue)
-	local elements = {}
+	local toggleButton = Instance.new("Frame") -- Using Frame for better visual control
+	toggleButton.Name = "ToggleButton"
+	toggleButton.Size = UDim2.new(0, 40, 0, 20)
+	toggleButton.Position = UDim2.new(1, -45, 0.5, -10)
+	toggleButton.BackgroundColor3 = isEnabledDefault and Library.Settings.ThemeColor or Library.Settings.ToggleOffColor
+	toggleButton.BorderSizePixel = 0
+	toggleButton.Parent = optionFrame
+
+	local uiCorner = Instance.new("UICorner")
+	uiCorner.CornerRadius = UDim.new(1, 0)
+	uiCorner.Parent = toggleButton
+
+	local indicator = Instance.new("Frame")
+	indicator.Name = "Indicator"
+	indicator.Size = UDim2.new(0, 16, 0, 16)
+	indicator.Position = isEnabledDefault and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+	indicator.BackgroundColor3 = Library.Settings.AccentColor
+	indicator.BorderSizePixel = 0
+	indicator.Parent = toggleButton
+
+	local uiCornerIndicator = Instance.new("UICorner")
+	uiCornerIndicator.CornerRadius = UDim.new(1, 0)
+	uiCornerIndicator.Parent = indicator
+
+    -- Use a TextButton overlay for input detection
+    local clickDetector = Instance.new("TextButton")
+    clickDetector.Name = "ClickDetector"
+    clickDetector.Size = UDim2.new(1,0,1,0)
+    clickDetector.BackgroundTransparency = 1
+    clickDetector.Text = ""
+    clickDetector.ZIndex = 2 -- Make sure it's above the frame/indicator
+    clickDetector.Parent = toggleButton
+
+	clickDetector.MouseButton1Click:Connect(function()
+		local isCurrentlyEnabled = toggleButton.BackgroundColor3 == Library.Settings.ThemeColor
+		local newState = not isCurrentlyEnabled
+
+		local newColor = newState and Library.Settings.ThemeColor or Library.Settings.ToggleOffColor
+		local newPosition = newState and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+
+		tween(toggleButton, { BackgroundColor3 = newColor }, TweenInfo.new(0.2)):Play()
+		tween(indicator, { Position = newPosition }, TweenInfo.new(0.2)):Play()
+
+		if onChangeCallback then onChangeCallback(optionName, newState) end
+	end)
+
+	return {
+		optionFrame = optionFrame,
+		toggleButton = toggleButton,
+		indicator = indicator,
+		label = label
+	}
+end
+
+--[[
+	Adds a slider element.
+	@param parent The parent frame.
+	@param sliderName The label text and identifier.
+	@param defaultValue The initial value.
+	@param minValue The minimum value.
+	@param maxValue The maximum value.
+    @param increment The step value (e.g., 0.1, 1). Defaults to 1.
+	@param layoutOrder The LayoutOrder.
+	@param onChangeCallback Function called when value changes, passes `sliderName, value`.
+	@returns Table containing { sliderFrame, valueLabel, sliderValue }
+]]
+function Library.AddSlider(parent, sliderName, defaultValue, minValue, maxValue, increment, layoutOrder, onChangeCallback)
+	increment = increment or 1 -- Default increment to 1 if not provided
+    local numDecimalPlaces = 0
+    if increment < 1 then
+        numDecimalPlaces = -math.log10(increment)
+    end
+
+    local function roundValue(value)
+        local factor = 10^numDecimalPlaces
+        return math.floor(value / increment + 0.5) * increment
+        --return math.floor((value / increment) + 0.5) * increment
+        --return math.floor( (value / increment) + 0.5 ) * increment --math.floor(value * factor + 0.5) / factor
+    end
+
+    local currentValue = roundValue(math.clamp(defaultValue, minValue, maxValue))
+
+	local sliderFrame = Instance.new("Frame")
+	sliderFrame.Name = sliderName .. "Slider"
+	sliderFrame.Size = UDim2.new(1, 0, 0, 50)
+	sliderFrame.BackgroundTransparency = 1
+	sliderFrame.LayoutOrder = layoutOrder
+	sliderFrame.Parent = parent
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.BackgroundTransparency = 1
+	label.Text = sliderName
+	label.TextColor3 = Library.Settings.TextColor
+	label.TextSize = 14
+	label.Font = Library.Settings.Font
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = sliderFrame
+
+	local sliderTrack = Instance.new("Frame")
+	sliderTrack.Name = "Track"
+	sliderTrack.Size = UDim2.new(1, -60, 0, 6)
+	sliderTrack.Position = UDim2.new(0, 0, 0, 30)
+	sliderTrack.BackgroundColor3 = Library.Settings.SliderTrackColor
+	sliderTrack.BorderSizePixel = 0
+	sliderTrack.Parent = sliderFrame
+
+	local uiCornerTrack = Instance.new("UICorner")
+	uiCornerTrack.CornerRadius = UDim.new(1, 0)
+	uiCornerTrack.Parent = sliderTrack
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+    local initialRatio = (currentValue - minValue) / (maxValue - minValue)
+	fill.Size = UDim2.new(initialRatio, 0, 1, 0)
+	fill.BackgroundColor3 = Library.Settings.ThemeColor
+	fill.BorderSizePixel = 0
+	fill.Parent = sliderTrack
+
+	local uiCornerFill = Instance.new("UICorner")
+	uiCornerFill.CornerRadius = UDim.new(1, 0)
+	uiCornerFill.Parent = fill
+
+	local knob = Instance.new("Frame")
+	knob.Name = "Knob"
+	knob.Size = UDim2.new(0, 16, 0, 16)
+	knob.Position = UDim2.new(initialRatio, -8, 0.5, -8)
+	knob.BackgroundColor3 = Library.Settings.AccentColor
+	knob.BorderSizePixel = 0
+    knob.ZIndex = 2
+	knob.Parent = sliderTrack
+
+	local uiCornerKnob = Instance.new("UICorner")
+	uiCornerKnob.CornerRadius = UDim.new(1, 0)
+	uiCornerKnob.Parent = knob
+
+	local valueLabel = Instance.new("TextLabel")
+	valueLabel.Name = "Value"
+	valueLabel.Size = UDim2.new(0, 50, 0, 20)
+	valueLabel.Position = UDim2.new(1, -50, 0, 23)
+	valueLabel.BackgroundTransparency = 1
+	valueLabel.Text = string.format("%."..numDecimalPlaces.."f", currentValue) -- Format based on increment
+	valueLabel.TextColor3 = Library.Settings.TextColor
+	valueLabel.TextSize = 14
+	valueLabel.Font = Library.Settings.Font
+	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+	valueLabel.Parent = sliderFrame
+
 	local isDragging = false
 
-	local sliderFrame = createInstance("Frame", {
-		Name = sliderName .. "Slider",
-		Size = UDim2.new(1, 0, 0, 50),
-		BackgroundTransparency = 1,
-		LayoutOrder = category._widgetCounter,
-		Parent = category.ScrollFrame,
-	})
-	elements.frame = sliderFrame
-
-	local sliderLabel = createInstance("TextLabel", {
-		Name = "Label", Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1,
-		Text = sliderName, TextColor3 = colors.Text, TextSize = 14, Font = Enum.Font.Gotham,
-		TextXAlignment = Enum.TextXAlignment.Left, Parent = sliderFrame,
-	})
-	elements.label = sliderLabel
-
-	local valueLabel = createInstance("TextLabel", {
-		Name = "Value", Size = UDim2.new(0, 50, 0, 20), Position = UDim2.new(1, -50, 0, 0),
-		BackgroundTransparency = 1, Text = string.format("%.1f", defaultValue), TextColor3 = colors.Text, TextSize = 14, Font = Enum.Font.Gotham,
-		TextXAlignment = Enum.TextXAlignment.Right, Parent = sliderFrame,
-	})
-	elements.valueLabel = valueLabel
-
-	local sliderTrack = createInstance("Frame", {
-		Name = "Track", Size = UDim2.new(1, 0, 0, 6), Position = UDim2.new(0, 0, 0, 25),
-		BackgroundColor3 = colors.SliderTrack, BorderSizePixel = 0, Parent = sliderFrame,
-	})
-	elements.track = sliderTrack
-	createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = sliderTrack })
-
-	local sliderFill = createInstance("Frame", {
-		Name = "Fill", Size = UDim2.new(currentRatio, 0, 1, 0), BackgroundColor3 = colors.Accent,
-		BorderSizePixel = 0, Parent = sliderTrack,
-	})
-	elements.fill = sliderFill
-	createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = sliderFill })
-
-	local sliderKnob = createInstance("Frame", {
-		Name = "Knob", Size = UDim2.new(0, 16, 0, 16), Position = UDim2.new(currentRatio, -8, 0.5, -8),
-		BackgroundColor3 = colors.Text, BorderSizePixel = 0, ZIndex = 2, Parent = sliderTrack,
-	})
-	elements.knob = sliderKnob
-	createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = sliderKnob })
-
-	local widgetData = {
-		Name = sliderName,
-		Type = "Slider",
-		Value = defaultValue,
-		Min = minValue,
-		Max = maxValue,
-		Callback = callback,
-		Elements = elements
-	}
-	table.insert(category.Widgets, widgetData)
-
-	-- Interaction Logic
 	local function updateSlider(inputPosition)
-		local trackAbsPos = sliderTrack.AbsolutePosition
-		local trackAbsSize = sliderTrack.AbsoluteSize
-		local mouseX = inputPosition.X
+		local trackPosition = sliderTrack.AbsolutePosition.X
+		local trackWidth = sliderTrack.AbsoluteSize.X
+		local mousePosition = inputPosition.X
 
-		local ratio = math.clamp((mouseX - trackAbsPos.X) / trackAbsSize.X, 0, 1)
-		local newValue = minValue + ratio * (maxValue - minValue)
-		newValue = math.floor(newValue * 10 + 0.5) / 10 -- Round to one decimal place
+		local ratio = math.clamp((mousePosition - trackPosition) / trackWidth, 0, 1)
+		local newValueRaw = minValue + ratio * (maxValue - minValue)
+        local newValueRounded = roundValue(newValueRaw)
 
-		if newValue ~= widgetData.Value then -- Only update if value changed
-			widgetData.Value = newValue
+        -- Only update if the rounded value actually changed
+		if newValueRounded ~= currentValue then
+            currentValue = newValueRounded
+            local displayRatio = (currentValue - minValue) / (maxValue - minValue) -- Use rounded value for display ratio
 
-			-- Update UI (use tweens for smoothness)
-			local tweenInfo = TweenInfo.new(0.05) -- Short tween for responsiveness
-			TweenService:Create(sliderFill, tweenInfo, { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
-			TweenService:Create(sliderKnob, tweenInfo, { Position = UDim2.new(ratio, -8, 0.5, -8) }):Play()
-			valueLabel.Text = string.format("%.1f", newValue)
+            tween(fill, { Size = UDim2.new(displayRatio, 0, 1, 0) }, TweenInfo.new(0.05)):Play()
+            tween(knob, { Position = UDim2.new(displayRatio, -8, 0.5, -8) }, TweenInfo.new(0.05)):Play()
+            valueLabel.Text = string.format("%."..numDecimalPlaces.."f", currentValue)
 
-			-- Execute callback
-			if widgetData.Callback then
-				task.spawn(widgetData.Callback, widgetData.Value)
-			end
-		end
+            if onChangeCallback then onChangeCallback(sliderName, currentValue) end
+        end
 	end
 
-	local con1 = sliderTrack.InputBegan:Connect(function(input)
+    -- Use TextButtons for input detection on track and knob
+    local trackButton = Instance.new("TextButton")
+    trackButton.Name = "TrackButton"
+    trackButton.Size = UDim2.new(1,0,3,0) -- Make slightly larger vertically for easier clicking
+    trackButton.Position = UDim2.new(0,0,0.5,-1.5 * trackButton.AbsoluteSize.Y)
+    trackButton.BackgroundTransparency = 1
+    trackButton.Text = ""
+    trackButton.ZIndex = 1
+    trackButton.Parent = sliderTrack
+
+    local knobButton = Instance.new("TextButton")
+    knobButton.Name = "KnobButton"
+    knobButton.Size = UDim2.new(1,0,1,0)
+    knobButton.BackgroundTransparency = 1
+    knobButton.Text = ""
+    knobButton.ZIndex = 3 -- Above knob visual
+    knobButton.Parent = knob
+
+
+	trackButton.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			isDragging = true
 			updateSlider(input.Position)
-			TweenService:Create(sliderKnob, TweenInfo.new(0.1), { Size = UDim2.new(0, 18, 0, 18), Position = sliderKnob.Position - UDim2.new(0,1,0,1) }):Play() -- Enlarge knob
-		end
-	end)
-	local con2 = sliderKnob.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			isDragging = true
-			TweenService:Create(sliderKnob, TweenInfo.new(0.1), { Size = UDim2.new(0, 18, 0, 18), Position = sliderKnob.Position - UDim2.new(0,1,0,1) }):Play() -- Enlarge knob
+			tween(knob, { Size = UDim2.new(0, 18, 0, 18), Position = knob.Position - UDim2.new(0, 1, 0, 1) }, TweenInfo.new(0.1)):Play()
 		end
 	end)
 
-	-- Global listeners for dragging and release
-	local dragMoveConn, dragEndConn
-	dragMoveConn = UserInputService.InputChanged:Connect(function(input)
+	knobButton.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			isDragging = true
+			tween(knob, { Size = UDim2.new(0, 18, 0, 18), Position = knob.Position - UDim2.new(0, 1, 0, 1) }, TweenInfo.new(0.1)):Play()
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 and isDragging then
+			isDragging = false
+			tween(knob, { Size = UDim2.new(0, 16, 0, 16), Position = knob.Position + UDim2.new(0, 1, 0, 1) }, TweenInfo.new(0.1)):Play()
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
 		if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
 			updateSlider(input.Position)
 		end
 	end)
-	dragEndConn = UserInputService.InputEnded:Connect(function(input)
-		if isDragging and input.UserInputType == Enum.UserInputType.MouseButton1 then
-			isDragging = false
-			TweenService:Create(sliderKnob, TweenInfo.new(0.1), { Size = UDim2.new(0, 16, 0, 16), Position = sliderKnob.Position + UDim2.new(0,1,0,1) }):Play() -- Shrink knob
-		end
-	end)
 
-	-- Track all connections
-	table.insert(window._connections, con1)
-	table.insert(window._connections, con2)
-	table.insert(window._connections, dragMoveConn)
-	table.insert(window._connections, dragEndConn)
-
-	return widgetData
-end
-
-function SharkUI.CategoryMethods:AddColorPicker(colorName, defaultColor, callback)
-	local category = self
-	local window = category._window
-	local colors = window.Colors
-	category._widgetCounter = category._widgetCounter + 1
-
-	local elements = {}
-
-	-- Main Option Frame
-	local colorFrame = createInstance("Frame", {
-		Name = colorName .. "Color", Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1,
-		LayoutOrder = category._widgetCounter, Parent = category.ScrollFrame,
-	})
-	elements.frame = colorFrame
-
-	local colorLabel = createInstance("TextLabel", {
-		Name = "Label", Size = UDim2.new(1, -50, 1, 0), BackgroundTransparency = 1, Text = colorName,
-		TextColor3 = colors.Text, TextSize = 14, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, Parent = colorFrame,
-	})
-	elements.label = colorLabel
-
-	local colorPreview = createInstance("Frame", {
-		Name = "Preview", Size = UDim2.new(0, 30, 0, 18), Position = UDim2.new(1, -35, 0.5, -9),
-		BackgroundColor3 = defaultColor, BorderSizePixel = 1, BorderColor3 = colors.TextMuted, Parent = colorFrame, -- Added border
-	})
-	elements.preview = colorPreview
-	createInstance("UICorner", { CornerRadius = UDim.new(0, 4), Parent = colorPreview })
-
-	local pickerButton = createInstance("TextButton", { -- Button overlay for clicking
-		Name = "PickerButton", Size = UDim2.new(0, 30, 0, 18), Position = UDim2.new(1, -35, 0.5, -9),
-		BackgroundTransparency = 1, Text = "", Parent = colorFrame, ZIndex = 2,
-	})
-	elements.button = pickerButton
-
-	-- Color Picker Popup (created once per picker, initially hidden)
-	local popupFrame = createInstance("Frame", {
-		Name = colorName .. "Popup", Size = UDim2.new(0, 220, 0, 285), BackgroundColor3 = colors.PopupBackground,
-		BorderSizePixel = 1, BorderColor3 = colors.TitleBar, -- Added border
-		Visible = false, ZIndex = 100, Parent = window._mainFrame, -- Parent to main frame for positioning
-		ClipsDescendants = true,
-	})
-	elements.popup = popupFrame
-	createInstance("UICorner", { CornerRadius = UDim.new(0, 6), Parent = popupFrame })
-
-	local popupContainer = createInstance("Frame", { Name = "Container", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = popupFrame })
-	createInstance("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 15), PaddingRight = UDim.new(0, 15), Parent = popupContainer })
-
-	-- Popup Contents
-	local pickerTitle = createInstance("TextLabel", { Name = "Title", Size = UDim2.new(1, -30, 0, 30), BackgroundTransparency = 1, Text = colorName, TextColor3 = colors.Text, TextSize = 16, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, Parent = popupContainer })
-	local popupCloseButton = createInstance("TextButton", { Name = "CloseButton", Size = UDim2.new(0, 24, 0, 24), Position = UDim2.new(1, -24, 0, 3), BackgroundTransparency = 1, Text = "✕", TextColor3 = colors.Text, TextSize = 16, Font = Enum.Font.GothamBold, ZIndex = 101, Parent = popupContainer })
-	local popupPreview = createInstance("Frame", { Name = "PopupPreview", Size = UDim2.new(0, 60, 0, 30), Position = UDim2.new(0.5, -30, 0, 40), BackgroundColor3 = defaultColor, BorderSizePixel = 1, BorderColor3 = colors.TextMuted, Parent = popupContainer })
-	createInstance("UICorner", { CornerRadius = UDim.new(0, 4), Parent = popupPreview })
-
-	local rgbSliders = {} -- To store R, G, B slider widgetData
-
-	-- Internal function to create sliders within the popup
-	local function createPopupSlider(sliderLetter, initialValue, yPos)
-		local sliderElements = {}
-		local sliderIsDragging = false
-
-		local sliderContainer = createInstance("Frame", { Name = sliderLetter .. "Container", Size = UDim2.new(1, 0, 0, 40), Position = UDim2.new(0, 0, 0, yPos), BackgroundTransparency = 1, Parent = popupContainer })
-		local sliderLabel = createInstance("TextLabel", { Name = "Label", Size = UDim2.new(0, 20, 0, 20), BackgroundTransparency = 1, Text = sliderLetter, TextColor3 = colors.Text, TextSize = 14, Font = Enum.Font.GothamBold, Parent = sliderContainer })
-		local valueLabel = createInstance("TextLabel", { Name = "Value", Size = UDim2.new(0, 40, 0, 20), Position = UDim2.new(1, -40, 0, 0), BackgroundTransparency = 1, Text = tostring(initialValue), TextColor3 = colors.Text, TextSize = 14, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right, Parent = sliderContainer })
-		local sliderTrack = createInstance("Frame", { Name = "Track", Size = UDim2.new(1, 0, 0, 6), Position = UDim2.new(0, 0, 0, 25), BackgroundColor3 = colors.SliderTrack, BorderSizePixel = 0, Parent = sliderContainer })
-		createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = sliderTrack })
-		local sliderFill = createInstance("Frame", { Name = "Fill", Size = UDim2.new(initialValue/255, 0, 1, 0), BackgroundColor3 = (sliderLetter == "R" and Color3.new(1,0,0)) or (sliderLetter == "G" and Color3.new(0,1,0)) or Color3.new(0,0,1), BorderSizePixel = 0, Parent = sliderTrack })
-		createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = sliderFill })
-		local sliderKnob = createInstance("Frame", { Name = "Knob", Size = UDim2.new(0, 16, 0, 16), Position = UDim2.new(initialValue/255, -8, 0.5, -8), BackgroundColor3 = colors.Text, BorderSizePixel = 0, ZIndex = 101, Parent = sliderTrack })
-		createInstance("UICorner", { CornerRadius = UDim.new(1, 0), Parent = sliderKnob })
-
-		sliderElements = {track = sliderTrack, fill = sliderFill, knob = sliderKnob, valueLabel = valueLabel}
-
-		local sliderWidgetData = { Value = initialValue, Elements = sliderElements }
-
-		-- Interaction Logic for Popup Slider
-		local function updatePopupSlider(inputPosition)
-			local trackAbsPos = sliderTrack.AbsolutePosition
-			local trackAbsSize = sliderTrack.AbsoluteSize
-			local mouseX = inputPosition.X
-
-			local ratio = math.clamp((mouseX - trackAbsPos.X) / trackAbsSize.X, 0, 1)
-			local newValue = math.floor(ratio * 255 + 0.5)
-
-			if newValue ~= sliderWidgetData.Value then
-				sliderWidgetData.Value = newValue
-				local tweenInfo = TweenInfo.new(0.05)
-				TweenService:Create(sliderFill, tweenInfo, { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
-				TweenService:Create(sliderKnob, tweenInfo, { Position = UDim2.new(ratio, -8, 0.5, -8) }):Play()
-				valueLabel.Text = tostring(newValue)
-
-				-- Update popup preview color based on all sliders
-				local r = rgbSliders.R.Value
-				local g = rgbSliders.G.Value
-				local b = rgbSliders.B.Value
-				popupPreview.BackgroundColor3 = Color3.fromRGB(r, g, b)
-			end
-		end
-
-		local scon1 = sliderTrack.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then sliderIsDragging = true; updatePopupSlider(input.Position) end end)
-		local scon2 = sliderKnob.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then sliderIsDragging = true end end)
-		-- Global listeners (use separate ones for popup sliders to avoid conflicts)
-		local sdragMoveConn, sdragEndConn
-		sdragMoveConn = UserInputService.InputChanged:Connect(function(input) if sliderIsDragging and input.UserInputType == Enum.UserInputType.MouseMovement then updatePopupSlider(input.Position) end end)
-		sdragEndConn = UserInputService.InputEnded:Connect(function(input) if sliderIsDragging and input.UserInputType == Enum.UserInputType.MouseButton1 then sliderIsDragging = false end end)
-
-		table.insert(window._connections, scon1)
-		table.insert(window._connections, scon2)
-		table.insert(window._connections, sdragMoveConn)
-		table.insert(window._connections, sdragEndConn)
-
-		return sliderWidgetData
-	end
-
-	-- Create R, G, B sliders
-	rgbSliders.R = createPopupSlider("R", math.floor(defaultColor.R * 255 + 0.5), 80)
-	rgbSliders.G = createPopupSlider("G", math.floor(defaultColor.G * 255 + 0.5), 130)
-	rgbSliders.B = createPopupSlider("B", math.floor(defaultColor.B * 255 + 0.5), 180)
-
-	-- Apply Button
-	local applyButton = createInstance("TextButton", { Name = "ApplyButton", Size = UDim2.new(0, 100, 0, 30), Position = UDim2.new(0.5, -50, 1, -40), BackgroundColor3 = colors.Accent, BorderSizePixel = 0, Text = "Apply", TextColor3 = colors.Text, TextSize = 14, Font = Enum.Font.GothamBold, ZIndex = 101, Parent = popupContainer })
-	createInstance("UICorner", { CornerRadius = UDim.new(0, 4), Parent = applyButton })
-	local applyCon1 = applyButton.MouseEnter:Connect(function() TweenService:Create(applyButton, TweenInfo.new(0.2), { BackgroundColor3 = colors.AccentHover }):Play() end)
-	local applyCon2 = applyButton.MouseLeave:Connect(function() TweenService:Create(applyButton, TweenInfo.new(0.2), { BackgroundColor3 = colors.Accent }):Play() end)
-	table.insert(window._connections, applyCon1)
-	table.insert(window._connections, applyCon2)
-
-	-- Store widget data
-	local widgetData = {
-		Name = colorName,
-		Type = "ColorPicker",
-		Value = defaultColor,
-		Callback = callback,
-		Elements = elements,
-		_rgbSliders = rgbSliders -- Internal reference
+	return {
+		sliderFrame = sliderFrame,
+		valueLabel = valueLabel,
+		sliderValue = function() return currentValue end -- Return a function to get current value
 	}
-	table.insert(category.Widgets, widgetData)
-
-	-- Show/Hide Popup Logic
-	local function togglePopup()
-		local isVisible = popupFrame.Visible
-		-- Hide all other popups first
-		for _, otherCategory in pairs(window._categories) do
-			for _, otherWidget in pairs(otherCategory.Widgets) do
-				if otherWidget.Type == "ColorPicker" and otherWidget.Elements.popup ~= popupFrame then
-					otherWidget.Elements.popup.Visible = false
-				end
-			end
-		end
-
-		if isVisible then
-			popupFrame.Visible = false
-		else
-			-- Position popup near the button, clamping to screen edges
-			local mainFrameAbsPos = window._mainFrame.AbsolutePosition
-			local mainFrameAbsSize = window._mainFrame.AbsoluteSize
-			local previewAbsPos = colorPreview.AbsolutePosition
-			local popupSize = popupFrame.AbsoluteSize
-
-			local idealX = previewAbsPos.X - popupSize.X / 2 -- Center on preview
-			local idealY = previewAbsPos.Y - popupSize.Y - 10 -- Position above preview
-
-			-- Clamp X position within main frame bounds
-			local finalX = math.clamp(idealX, mainFrameAbsPos.X + 5, mainFrameAbsPos.X + mainFrameAbsSize.X - popupSize.X - 5)
-			-- Clamp Y position
-			local finalY = math.clamp(idealY, mainFrameAbsPos.Y + 5, mainFrameAbsPos.Y + mainFrameAbsSize.Y - popupSize.Y - 5)
-
-			-- Convert back to Offset relative to MainFrame
-			popupFrame.Position = UDim2.new(0, finalX - mainFrameAbsPos.X, 0, finalY - mainFrameAbsPos.Y)
-			popupFrame.Visible = true
-		end
-	end
-
-	local con1 = pickerButton.MouseButton1Click:Connect(togglePopup)
-	local con2 = popupCloseButton.MouseButton1Click:Connect(function() popupFrame.Visible = false end)
-	table.insert(window._connections, con1)
-	table.insert(window._connections, con2)
-
-	-- Apply Button Logic
-	local con3 = applyButton.MouseButton1Click:Connect(function()
-		local r = rgbSliders.R.Value
-		local g = rgbSliders.G.Value
-		local b = rgbSliders.B.Value
-		local newColor = Color3.fromRGB(r, g, b)
-
-		widgetData.Value = newColor         -- Update internal value
-		colorPreview.BackgroundColor3 = newColor -- Update the small preview
-		popupFrame.Visible = false          -- Hide popup
-
-		-- Execute callback
-		if widgetData.Callback then
-			task.spawn(widgetData.Callback, newColor)
-		end
-	end)
-	table.insert(window._connections, con3)
-
-	return widgetData
 end
 
 
-return SharkUI -- Return the library table
+--[[
+	Adds a color picker element.
+	@param parent The parent frame.
+    @param rootInstance The top-level frame (MainFrame) to parent the popup to.
+	@param colorName The label text and identifier.
+	@param defaultColor The initial Color3 value.
+	@param layoutOrder The LayoutOrder.
+	@param onChangeCallback Function called when color is applied, passes `colorName, newColor`.
+	@returns Table containing { colorFrame, preview }
+]]
+function Library.AddColorPicker(parent, rootInstance, colorName, defaultColor, layoutOrder, onChangeCallback)
+    local currentColor = defaultColor
+
+    local colorFrame = Instance.new("Frame")
+    colorFrame.Name = colorName .. "Color"
+    colorFrame.Size = UDim2.new(1, 0, 0, 30)
+    colorFrame.BackgroundTransparency = 1
+    colorFrame.LayoutOrder = layoutOrder
+    colorFrame.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, -50, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = colorName
+    label.TextColor3 = Library.Settings.TextColor
+    label.TextSize = 14
+    label.Font = Library.Settings.Font
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = colorFrame
+
+    local preview = Instance.new("Frame")
+    preview.Name = "Preview"
+    preview.Size = UDim2.new(0, 30, 0, 18)
+    preview.Position = UDim2.new(1, -35, 0.5, -9)
+    preview.BackgroundColor3 = currentColor
+    preview.BorderSizePixel = 1
+    preview.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    preview.Parent = colorFrame
+
+    local uiCornerPreview = Instance.new("UICorner")
+    uiCornerPreview.CornerRadius = UDim.new(0, 4)
+    uiCornerPreview.Parent = preview
+
+    local pickerButton = Instance.new("TextButton")
+    pickerButton.Name = "PickerButton"
+    pickerButton.Size = UDim2.new(1,0,1,0) -- Cover the whole preview area
+    pickerButton.Position = UDim2.new(0,0,0,0)
+    pickerButton.BackgroundTransparency = 1
+    pickerButton.Text = ""
+    pickerButton.ZIndex = 2
+    pickerButton.Parent = preview
+
+    -- Create color picker popup (initially hidden) - Parent to rootInstance
+    local popup = Instance.new("Frame")
+    popup.Name = colorName .. "Popup"
+    popup.Size = UDim2.new(0, 220, 0, 285) -- Adjusted size for better layout
+    popup.BackgroundColor3 = Library.Settings.SecondaryBackgroundColor:Lerp(Color3.new(0,0,0), 0.1) -- Slightly darker popup
+    popup.BorderSizePixel = 1
+    popup.BorderColor3 = Color3.fromRGB(50,50,50)
+    popup.Visible = false
+    popup.ZIndex = 100 -- Ensure it's above other elements
+    popup.ClipsDescendants = true
+    popup.Parent = rootInstance -- Parent to main window frame
+
+    local uiCornerPopup = Instance.new("UICorner")
+    uiCornerPopup.CornerRadius = UDim.new(0, 6)
+    uiCornerPopup.Parent = popup
+
+    local popupContainer = Instance.new("Frame")
+    popupContainer.Name = "Container"
+    popupContainer.Size = UDim2.new(1, 0, 1, 0)
+    popupContainer.BackgroundTransparency = 1
+    popupContainer.Parent = popup
+
+    local uiPadding = Instance.new("UIPadding")
+    uiPadding.PaddingTop = UDim.new(0, 10)
+    uiPadding.PaddingBottom = UDim.new(0, 10)
+    uiPadding.PaddingLeft = UDim.new(0, 15)
+    uiPadding.PaddingRight = UDim.new(0, 15)
+    uiPadding.Parent = popupContainer
+
+    local pickerTitle = Instance.new("TextLabel")
+	pickerTitle.Name = "Title"
+	pickerTitle.Size = UDim2.new(1, -30, 0, 30)
+	pickerTitle.Position = UDim2.new(0, 0, 0, 0)
+	pickerTitle.BackgroundTransparency = 1
+	pickerTitle.Text = colorName
+	pickerTitle.TextColor3 = Library.Settings.TextColor
+	pickerTitle.TextSize = 16
+	pickerTitle.Font = Library.Settings.FontBold
+	pickerTitle.TextXAlignment = Enum.TextXAlignment.Left
+	pickerTitle.Parent = popupContainer
+
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Size = UDim2.new(0, 24, 0, 24)
+    closeButton.Position = UDim2.new(1, -24, 0, 3)
+    closeButton.BackgroundTransparency = 1
+    closeButton.Text = "✕"
+    closeButton.TextColor3 = Library.Settings.InactiveColor
+    closeButton.TextSize = 16
+    closeButton.Font = Library.Settings.FontBold
+    closeButton.ZIndex = 101
+    closeButton.Parent = popupContainer
+
+	closeButton.MouseEnter:Connect(function() tween(closeButton, { TextColor3 = Library.Settings.TextColor }, TweenInfo.new(0.1)):Play() end)
+	closeButton.MouseLeave:Connect(function() tween(closeButton, { TextColor3 = Library.Settings.InactiveColor }, TweenInfo.new(0.1)):Play() end)
+    closeButton.MouseButton1Click:Connect(function() popup.Visible = false end)
+
+
+    local popupPreview = Instance.new("Frame")
+    popupPreview.Name = "PopupPreview"
+    popupPreview.Size = UDim2.new(0, 60, 0, 30)
+    popupPreview.Position = UDim2.new(0.5, -30, 0, 40)
+    popupPreview.BackgroundColor3 = currentColor
+    popupPreview.BorderSizePixel = 1
+    popupPreview.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    popupPreview.Parent = popupContainer
+
+    local uiCornerPopupPreview = Instance.new("UICorner")
+    uiCornerPopupPreview.CornerRadius = UDim.new(0, 4)
+    uiCornerPopupPreview.Parent = popupPreview
+
+    -- Helper for color sliders inside the popup
+    local function createColorSlider(container, sliderName, initialValue, yPos, color)
+        local value = math.floor(initialValue * 255)
+
+        local sliderContainer = Instance.new("Frame")
+        sliderContainer.Name = sliderName .. "Container"
+        sliderContainer.Size = UDim2.new(1, 0, 0, 40)
+        sliderContainer.Position = UDim2.new(0, 0, 0, yPos)
+        sliderContainer.BackgroundTransparency = 1
+        sliderContainer.Parent = container
+
+        local sliderLabel = Instance.new("TextLabel")
+        sliderLabel.Name = "Label"
+        sliderLabel.Size = UDim2.new(0, 20, 0, 20)
+        sliderLabel.Position = UDim2.new(0, 0, 0, 0)
+        sliderLabel.BackgroundTransparency = 1
+        sliderLabel.Text = sliderName
+        sliderLabel.TextColor3 = Library.Settings.TextColor
+        sliderLabel.TextSize = 14
+        sliderLabel.Font = Library.Settings.FontBold
+        sliderLabel.Parent = sliderContainer
+
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.Name = "Value"
+        valueLabel.Size = UDim2.new(0, 40, 0, 20)
+        valueLabel.Position = UDim2.new(1, -40, 0, 0)
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Text = tostring(value)
+        valueLabel.TextColor3 = Library.Settings.TextColor
+        valueLabel.TextSize = 14
+        valueLabel.Font = Library.Settings.Font
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valueLabel.Parent = sliderContainer
+
+        local sliderTrack = Instance.new("Frame")
+        sliderTrack.Name = "Track"
+        sliderTrack.Size = UDim2.new(1, 0, 0, 6)
+        sliderTrack.Position = UDim2.new(0, 0, 0, 25)
+        sliderTrack.BackgroundColor3 = Library.Settings.SliderTrackColor
+        sliderTrack.BorderSizePixel = 0
+        sliderTrack.Parent = sliderContainer
+
+        local uiCornerTrack = Instance.new("UICorner")
+        uiCornerTrack.CornerRadius = UDim.new(1, 0)
+        uiCornerTrack.Parent = sliderTrack
+
+        local fill = Instance.new("Frame")
+        fill.Name = "Fill"
+        fill.Size = UDim2.new(value / 255, 0, 1, 0)
+        fill.BackgroundColor3 = color
+        fill.BorderSizePixel = 0
+        fill.Parent = sliderTrack
+
+        local uiCornerFill = Instance.new("UICorner")
+        uiCornerFill.CornerRadius = UDim.new(1, 0)
+        uiCornerFill.Parent = fill
+
+        local knob = Instance.new("Frame")
+        knob.Name = "Knob"
+        knob.Size = UDim2.new(0, 16, 0, 16)
+        knob.Position = UDim2.new(value / 255, -8, 0.5, -8)
+        knob.BackgroundColor3 = Library.Settings.AccentColor
+        knob.BorderSizePixel = 0
+        knob.ZIndex = 2
+        knob.Parent = sliderTrack
+
+        local uiCornerKnob = Instance.new("UICorner")
+        uiCornerKnob.CornerRadius = UDim.new(1, 0)
+        uiCornerKnob.Parent = knob
+
+        local isDragging = false
+
+        local function updateColorSlider(inputPosition)
+            local trackPosition = sliderTrack.AbsolutePosition.X
+            local trackWidth = sliderTrack.AbsoluteSize.X
+            local mousePosition = inputPosition.X
+
+            local ratio = math.clamp((mousePosition - trackPosition) / trackWidth, 0, 1)
+            local newValue = math.floor(ratio * 255)
+
+            if newValue ~= tonumber(valueLabel.Text) then
+                valueLabel.Text = tostring(newValue)
+                tween(fill, { Size = UDim2.new(ratio, 0, 1, 0) }, TweenInfo.new(0.05)):Play()
+                tween(knob, { Position = UDim2.new(ratio, -8, 0.5, -8) }, TweenInfo.new(0.05)):Play()
+
+                -- Update popup preview immediately
+                local r = tonumber(popupContainer.RContainer.Value.Text) or 0
+                local g = tonumber(popupContainer.GContainer.Value.Text) or 0
+                local b = tonumber(popupContainer.BContainer.Value.Text) or 0
+                popupPreview.BackgroundColor3 = Color3.fromRGB(r, g, b)
+            end
+        end
+
+        -- Input Buttons
+        local trackButton = Instance.new("TextButton")
+        trackButton.Name = "TrackButton"
+        trackButton.Size = UDim2.new(1,0,3,0)
+        trackButton.Position = UDim2.new(0,0,0.5,-1.5 * trackButton.AbsoluteSize.Y)
+        trackButton.BackgroundTransparency = 1
+        trackButton.Text = ""
+        trackButton.ZIndex = 1
+        trackButton.Parent = sliderTrack
+
+        local knobButton = Instance.new("TextButton")
+        knobButton.Name = "KnobButton"
+        knobButton.Size = UDim2.new(1,0,1,0)
+        knobButton.BackgroundTransparency = 1
+        knobButton.Text = ""
+        knobButton.ZIndex = 3
+        knobButton.Parent = knob
+
+        trackButton.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; updateColorSlider(input.Position); end end)
+        knobButton.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; end end)
+        UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false; end end)
+        UserInputService.InputChanged:Connect(function(input) if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then updateColorSlider(input.Position); end end)
+
+        return { container = sliderContainer, valueLabel = valueLabel }
+    end
+
+    -- Create RGB sliders
+    local redSlider = createColorSlider(popupContainer, "R", currentColor.R, 80, Color3.fromRGB(255, 50, 50))
+    local greenSlider = createColorSlider(popupContainer, "G", currentColor.G, 130, Color3.fromRGB(50, 255, 50))
+    local blueSlider = createColorSlider(popupContainer, "B", currentColor.B, 180, Color3.fromRGB(50, 50, 255))
+
+    -- Apply button
+    local applyButton = Instance.new("TextButton")
+    applyButton.Name = "ApplyButton"
+    applyButton.Size = UDim2.new(0, 100, 0, 30)
+    applyButton.Position = UDim2.new(0.5, -50, 1, -40)
+    applyButton.BackgroundColor3 = Library.Settings.ThemeColor
+    applyButton.BorderSizePixel = 0
+    applyButton.Text = "Apply"
+    applyButton.TextColor3 = Library.Settings.TextColor
+    applyButton.TextSize = 14
+    applyButton.Font = Library.Settings.FontBold
+    applyButton.ZIndex = 100
+    applyButton.Parent = popupContainer
+
+    local uiCornerApply = Instance.new("UICorner")
+    uiCornerApply.CornerRadius = UDim.new(0, 4)
+    uiCornerApply.Parent = applyButton
+
+    applyButton.MouseEnter:Connect(function() tween(applyButton, { BackgroundColor3 = Library.Settings.ThemeColor:Lerp(Color3.new(1,1,1), 0.2) }, TweenInfo.new(0.1)):Play() end)
+    applyButton.MouseLeave:Connect(function() tween(applyButton, { BackgroundColor3 = Library.Settings.ThemeColor }, TweenInfo.new(0.1)):Play() end)
+
+    applyButton.MouseButton1Click:Connect(function()
+        local r = tonumber(redSlider.valueLabel.Text) / 255
+        local g = tonumber(greenSlider.valueLabel.Text) / 255
+        local b = tonumber(blueSlider.valueLabel.Text) / 255
+        local newColor = Color3.new(r, g, b)
+
+        currentColor = newColor
+        preview.BackgroundColor3 = newColor
+        popup.Visible = false
+
+        if onChangeCallback then onChangeCallback(colorName, newColor) end
+    end)
+
+    -- Toggle popup visibility
+    pickerButton.MouseButton1Click:Connect(function()
+         -- Hide all other popups first
+        for _, child in ipairs(rootInstance:GetChildren()) do
+            if child:IsA("Frame") and child.Name:match("Popup$") and child ~= popup then
+                child.Visible = false
+            end
+        end
+
+        -- Position and show/hide this popup
+        local previewAbsPos = preview.AbsolutePosition
+        local previewAbsSize = preview.AbsoluteSize
+        local rootAbsSize = rootInstance.AbsoluteSize
+        local popupSize = popup.AbsoluteSize
+
+        -- Attempt to position below and centered, fallback to above
+        local targetX = previewAbsPos.X + previewAbsSize.X / 2 - popupSize.X / 2
+        local targetY = previewAbsPos.Y + previewAbsSize.Y + 5 -- Below
+
+        -- Adjust if off-screen
+        if targetX < 5 then targetX = 5 end
+        if targetX + popupSize.X > rootAbsSize.X - 5 then targetX = rootAbsSize.X - 5 - popupSize.X end
+        if targetY + popupSize.Y > rootAbsSize.Y - 5 then targetY = previewAbsPos.Y - popupSize.Y - 5 end -- Above
+        if targetY < 5 then targetY = 5 end -- Fallback if still offscreen
+
+        popup.Position = UDim2.fromOffset(targetX, targetY)
+        popup.Visible = not popup.Visible
+
+        -- If becoming visible, reset sliders to current color
+        if popup.Visible then
+            redSlider.valueLabel.Text = tostring(math.floor(currentColor.R * 255))
+            greenSlider.valueLabel.Text = tostring(math.floor(currentColor.G * 255))
+            blueSlider.valueLabel.Text = tostring(math.floor(currentColor.B * 255))
+            local rRatio, gRatio, bRatio = currentColor.R, currentColor.G, currentColor.B
+            popupContainer.RContainer.Track.Fill.Size = UDim2.new(rRatio, 0, 1, 0)
+            popupContainer.GContainer.Track.Fill.Size = UDim2.new(gRatio, 0, 1, 0)
+            popupContainer.BContainer.Track.Fill.Size = UDim2.new(bRatio, 0, 1, 0)
+            popupContainer.RContainer.Track.Knob.Position = UDim2.new(rRatio, -8, 0.5, -8)
+            popupContainer.GContainer.Track.Knob.Position = UDim2.new(gRatio, -8, 0.5, -8)
+            popupContainer.BContainer.Track.Knob.Position = UDim2.new(bRatio, -8, 0.5, -8)
+            popupPreview.BackgroundColor3 = currentColor
+        end
+    end)
+
+    return {
+        colorFrame = colorFrame,
+        preview = preview,
+        popup = popup -- Return popup in case user wants to manage visibility externally
+    }
+end
+
+
+--[[
+	Applies entrance animation to the window.
+	@param windowElements The table returned by CreateWindow.
+]]
+function Library.AnimateEntrance(windowElements)
+    local mainFrame = windowElements.mainFrame
+    local originalSize = mainFrame.Size
+    local originalPosition = mainFrame.Position
+
+    mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 0)
+    mainFrame.Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, 0.5, 0)
+    windowElements.screenGui.Enabled = true
+
+    tween(mainFrame, { Size = originalSize, Position = originalPosition }, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)):Play()
+end
+
+--[[
+	Applies exit animation and toggles visibility.
+	@param windowElements The table returned by CreateWindow.
+    @param callback Optional function to call after animation completes.
+]]
+function Library.AnimateToggleVisibility(windowElements, callback)
+    local mainFrame = windowElements.mainFrame
+    local screenGui = windowElements.screenGui
+    local originalSize = mainFrame.Size -- Assuming it's currently visible
+    local originalPosition = mainFrame.Position
+
+    if screenGui.Enabled then
+        -- Hide
+        tween(mainFrame, { Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 0), Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, 0.5, 0) }, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)):Play()
+        task.wait(0.3)
+        screenGui.Enabled = false
+    else
+        -- Show
+        mainFrame.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 0)
+        mainFrame.Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, 0.5, 0)
+        screenGui.Enabled = true
+        tween(mainFrame, { Size = originalSize, Position = originalPosition }, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)):Play()
+    end
+
+    if callback then
+        task.wait(0.5) -- Wait for potential show animation
+        callback()
+    end
+end
+
+return Library
