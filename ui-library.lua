@@ -422,7 +422,7 @@ function CoreGUI.createMenuButton(parent, name, iconImageId, iconRectOffset, ico
         if hoverHighlight.BackgroundTransparency == 1 then
             TweenService:Create(hoverHighlight, TweenInfo.new(styles.AnimationSpeed), { BackgroundTransparency = 0.8 }):Play()
         end
-    })
+    end)
 
     button.MouseLeave:Connect(function()
          -- Don't fade out if selected
